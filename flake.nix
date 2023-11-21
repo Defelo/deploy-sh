@@ -13,8 +13,8 @@
           declare -A deploy_commands=(
           ${concatStringsSep "\n" (
             mapAttrsToList (k: v: let
-              cfg = v.config.deploy;
-              cmd = "nixos-rebuild ${command} --flake ${escapeShellArg ".#${k}"} --target-host ${escapeShellArg cfg.host} ${optionalString cfg.remoteBuild "--build-host ${escapeShellArg cfg.host}"}";
+              cfg = v.config.deploy-sh;
+              cmd = "nixos-rebuild ${command} --flake ${escapeShellArg ".#${k}"} --target-host ${escapeShellArg cfg.targetHost} ${optionalString (cfg.buildHost != null) "--build-host ${escapeShellArg cfg.buildHost}"}";
             in "  [${escapeShellArg k}]=${escapeShellArg cmd}")
             hosts
           )}
@@ -58,15 +58,19 @@
           cp ${mkDeploy "boot"} $out/bin/deploy-boot
         '';
       };
-    nixosModules.default = {lib, ...}:
+    nixosModules.default = {
+      config,
+      lib,
+      ...
+    }:
       with lib; {
-        options.deploy = {
-          host = mkOption {
+        options.deploy-sh = {
+          targetHost = mkOption {
             type = types.str;
           };
-          remoteBuild = mkOption {
-            type = types.bool;
-            default = true;
+          buildHost = mkOption {
+            type = types.nullOr types.str;
+            default = config.deploy-sh.targetHost;
           };
         };
         config = {};
