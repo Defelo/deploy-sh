@@ -1,2 +1,2 @@
 # deploy-sh
-Very simple NixOS remote deployment tool
+Simple NixOS remote deployment tool

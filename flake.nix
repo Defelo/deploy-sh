@@ -1,66 +1,46 @@
 {
-  outputs = {self}: {
-    lib.mkDeploy = {
-      hosts,
-      pkgs,
-    }: let
-      inherit (builtins) concatStringsSep;
-      inherit (pkgs.lib) mapAttrsToList escapeShellArg optionalString;
-      mkDeploy = command:
-        pkgs.writeShellScript "deploy-${command}" ''
-          export PATH=${pkgs.nixos-rebuild}/bin:$PATH
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  };
 
-          declare -A deploy_commands=(
-          ${concatStringsSep "\n" (
-            mapAttrsToList (k: v: let
-              cfg = v.config.deploy-sh;
-              cmd = "nixos-rebuild ${command} --flake ${escapeShellArg ".#${k}"} --target-host ${escapeShellArg cfg.targetHost} ${optionalString (cfg.buildHost != null) "--build-host ${escapeShellArg cfg.buildHost}"}";
-            in "  [${escapeShellArg k}]=${escapeShellArg cmd}")
-            hosts
-          )}
-          )
-
-          fst=1
-          deploy() {
-            [[ $fst = 0 ]] && echo; fst=0
-            cmd="''${deploy_commands["$1"]}"
-            if [[ -z "$cmd" ]]; then
-              echo -e "\033[1m\033[31mHost '$1' not found!\033[0m"
-              exit 1
-            else
-              echo -e "\033[1mDeploying host '$1'\033[0m"
-              echo -e "+ $cmd"
-              if eval "$cmd"; then
-                echo -e "\033[1m\033[32mHost '$1' successfully deployed!\033[0m"
-              else
-                echo -e "\033[1m\033[31mDeployment of host '$1' failed!\033[0m"
-                exit 2
-              fi
-            fi
-          }
-
-          if [[ $# -eq 0 ]]; then
-          ${concatStringsSep "\n" (mapAttrsToList (k: v: "  deploy ${escapeShellArg k}") hosts)}
-          else
-            for host in $@; do
-              deploy "$host"
-            done
-          fi
-        '';
-    in
-      pkgs.stdenv.mkDerivation {
-        name = "deploy-sh";
+  outputs = {
+    nixpkgs,
+    self,
+  }: let
+    defaultSystems = [
+      "x86_64-linux"
+      "x86_64-darwin"
+      "aarch64-linux"
+      "aarch64-darwin"
+    ];
+    eachDefaultSystem = f:
+      builtins.listToAttrs (map (system: {
+          name = system;
+          value = f system;
+        })
+        defaultSystems);
+  in {
+    packages = eachDefaultSystem (system: let
+      pkgs = import nixpkgs {inherit system;};
+    in {
+      default = pkgs.stdenvNoCC.mkDerivation {
+        pname = "deploy-sh";
+        version = "0.2.0";
+        nativeBuildInputs = [pkgs.makeWrapper];
         unpackPhase = "true";
         installPhase = ''
-          mkdir -p $out/bin;
-          cp ${mkDeploy "switch"} $out/bin/deploy
-          cp ${mkDeploy "test"} $out/bin/deploy-test
-          cp ${mkDeploy "boot"} $out/bin/deploy-boot
+          install -DT ${./deploy.sh} $out/bin/deploy
+        '';
+        postFixup = ''
+          wrapProgram $out/bin/deploy --set PATH ${with pkgs; lib.makeBinPath [coreutils nix git openssh]}
         '';
       };
+    });
+
     nixosModules.default = {
       config,
       lib,
+      pkgs,
       ...
     }:
       with lib; {
@@ -72,8 +52,29 @@
             type = types.nullOr types.str;
             default = config.deploy-sh.targetHost;
           };
+          buildCache = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+          };
+
+          _config = mkOption {
+            type = types.anything;
+            visible = false;
+            readOnly = true;
+          };
         };
-        config = {};
+
+        config.deploy-sh._config = let
+          vars = {
+            inherit (config.deploy-sh) buildHost targetHost buildCache;
+            systemDrv = config.system.build.toplevel.drvPath;
+            system = config.system.build.toplevel.outPath;
+            nomDrv = pkgs.nix-output-monitor.drvPath;
+            nom = pkgs.nix-output-monitor.outPath;
+          };
+          text = builtins.concatStringsSep "" (lib.mapAttrsToList (k: v: "local ${k}=${lib.escapeShellArg v}\n") vars);
+        in
+          pkgs.writeText "deploy-sh-config" (builtins.unsafeDiscardStringContext text);
       };
   };
 }
