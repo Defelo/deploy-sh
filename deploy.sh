@@ -114,10 +114,21 @@ deploy() {
   fi
 
   log "Activating system on $targetHost ($action)"
-  if [[ "$action" =~ ^(switch|boot)$ ]]; then
+  if [[ "$action" =~ ^(switch|boot|reboot)$ ]]; then
     ssh $(sshPort "$targetHost") $(sshHost "$targetHost") nix-env -p /nix/var/nix/profiles/system --set "$system"
   fi
-  ssh $(sshPort "$targetHost") $(sshHost "$targetHost") "$system/bin/switch-to-configuration" "$action"
+  if [[ "$action" = "reboot" ]]; then
+    ssh $(sshPort "$targetHost") $(sshHost "$targetHost") "$system/bin/switch-to-configuration" boot
+    log "Rebooting $targetHost"
+    ssh $(sshPort "$targetHost") $(sshHost "$targetHost") reboot
+    log "Waiting for $targetHost to reboot"
+    sleep 5
+    while ! ssh $(sshPort "$targetHost") $(sshHost "$targetHost") true; do
+      sleep 1
+    done
+  else
+    ssh $(sshPort "$targetHost") $(sshHost "$targetHost") "$system/bin/switch-to-configuration" "$action"
+  fi
 
   log "Deployment of $host succeeded!" "\033[32m"
 }
@@ -135,7 +146,7 @@ deployed=0
 while [[ $# -gt 0 ]]; do
   i="$1"; shift 1
   case "$i" in
-    --switch|--boot|--test|--dry-activate)
+    --switch|--boot|--test|--dry-activate|--reboot)
       action=${i#"--"}
       ;;
     --local)
