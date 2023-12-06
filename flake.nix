@@ -32,7 +32,7 @@
           install -DT ${./deploy.sh} $out/bin/deploy
         '';
         postFixup = ''
-          wrapProgram $out/bin/deploy --set PATH ${with pkgs; lib.makeBinPath [coreutils nix git openssh]}
+          wrapProgram $out/bin/deploy --set PATH ${with pkgs; lib.makeBinPath [coreutils bash nix git openssh]}
         '';
       };
     });
