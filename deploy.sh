@@ -7,7 +7,7 @@ log() {
   if [[ -n "$host" ]]; then
     prefix="[$host] "
   fi
-  echo -e "\033[1m${2:-\033[34m}$prefix$1\033[0m"
+  echo -e "\e[1m${2:-\e[34m}$prefix$1\e[0m"
 }
 
 sshHost() { echo "${1%:*}"; }
@@ -19,9 +19,9 @@ nix="nix --extra-experimental-features nix-command --extra-experimental-features
 
 deploy() {
   host="$1"
-  trap "log 'Deployment of $host failed!' \"\033[31m\"" ERR
+  trap "log 'Deployment of $host failed!' \"\e[31m\"" ERR
 
-  log "Starting deployment of $host" "\033[33m"
+  log "Starting deployment of $host" "\e[33m"
   log "Evaluating configuration"
   local config
   config=$($nix build --no-link --print-out-paths ".#nixosConfigurations.\"$host\".config.deploy-sh._config")
@@ -47,21 +47,21 @@ deploy() {
   fi
 
   if [[ -z "$buildHost" ]]; then
-    log "Building locally, then deploying to $targetHost" "\033[36m"
+    log "Building locally, then deploying to $targetHost" "\e[36m"
   elif [[ "$buildHost" = "$targetHost" ]]; then
-    log "Building and deploying to $targetHost" "\033[36m"
+    log "Building and deploying to $targetHost" "\e[36m"
   else
-    log "Building on $buildHost, then deploying to $targetHost" "\033[36m"
+    log "Building on $buildHost, then deploying to $targetHost" "\e[36m"
   fi
   if [[ -n "$buildCache" ]]; then
     if [[ -z "$buildHost" ]]; then
-      log "Cache the system at $buildCache" "\033[36m"
+      log "Cache the system at $buildCache" "\e[36m"
     else
-      log "Cache the system on $buildHost at $buildCache" "\033[36m"
+      log "Cache the system on $buildHost at $buildCache" "\e[36m"
     fi
   fi
-  log "System path: $system" "\033[0m"
-  log "System derivation: $systemDrv" "\033[0m"
+  log "System path: $system" "\e[0m"
+  log "System derivation: $systemDrv" "\e[0m"
 
   local nomPipe="--log-format internal-json -v |& $nom/bin/nom --json"
 
@@ -74,7 +74,7 @@ deploy() {
         log "Fetching old system from $targetHost"
         ssh $(sshPort "$buildHost") $(sshHost "$buildHost") env $(nixSshPort "$targetHost") $nix copy --no-check-sigs --from $(nixSshHost "$targetHost") "$oldSystem"
       else
-        log "Failed to lookup current system on $targetHost" "\033[31m"
+        log "Failed to lookup current system on $targetHost" "\e[31m"
       fi
     fi
 
@@ -96,7 +96,7 @@ deploy() {
         log "Fetching old system from $targetHost"
         env $(nixSshPort "$targetHost") $nix copy --no-check-sigs --from $(nixSshHost "$targetHost") "$oldSystem"
       else
-        log "Failed to lookup current system on $targetHost" "\033[31m"
+        log "Failed to lookup current system on $targetHost" "\e[31m"
       fi
     fi
 
@@ -130,9 +130,44 @@ deploy() {
     ssh $(sshPort "$targetHost") $(sshHost "$targetHost") "$system/bin/switch-to-configuration" "$action"
   fi
 
-  log "Deployment of $host succeeded!" "\033[32m"
+  log "Deployment of $host succeeded!" "\e[32m"
 }
 
+for arg in $@; do
+  if [[ "$arg" =~ ^(-h|--help)$ ]]; then
+    echo -e "Simple NixOS remote deployment tool (\e[36mhttps://github.com/Defelo/deploy-sh\e[0m)"
+    echo -e
+    echo -e "\e[1m\e[32mUsage: \e[36mdeploy [OPTIONS] [HOSTS]...\e[0m"
+    echo -e
+    echo -e "For each host, only the most recent options to its left are taken into account. For"
+    echo -e "example, \`\e[36mdeploy --local foo bar --remote baz\e[0m\` will build hosts foo and bar locally,"
+    echo -e "and only baz on a remote build host."
+    echo -e "All hosts are deployed if no host is specified explicitly."
+    echo -e
+    echo -e "\e[1m\e[32mActivation options:\e[0m"
+    echo -e "\e[1m\e[36m  --switch       \e[0m Build and activate the new configuration, and make it the boot default. (default)"
+    echo -e "\e[1m\e[36m  --boot         \e[0m Build the new configuration and make it the boot default, but do not activate it."
+    echo -e "\e[1m\e[36m  --test         \e[0m Build and activate the new configuration, but do not add it to the boot menu."
+    echo -e "\e[1m\e[36m  --dry-activate \e[0m Build the new configuration, but do not activate it."
+    echo -e "\e[1m\e[36m  --reboot       \e[0m Build the new configuration, make it the boot default and reboot into the new system."
+    echo -e
+    echo -e "\e[1m\e[32mHost options:\e[0m"
+    echo -e "\e[1m\e[36m  --local        \e[0m Build the configuration locally and copy the new system to the target host."
+    echo -e "\e[1m\e[36m  --remote       \e[0m Build the configuration on the remote build host."
+    echo -e "\e[1m\e[36m  --build-host   \e[0m Set the host to build the configuration on."
+    echo -e "\e[1m\e[36m  --target-host  \e[0m Set the host to deploy the system on."
+    echo -e
+    echo -e "\e[1m\e[32mBuild options:\e[0m"
+    echo -e "\e[1m\e[36m  --cache        \e[0m Set a path on the build host where to store a symlink to the new system to avoid garbage collection."
+    echo -e "\e[1m\e[36m  --no-cache     \e[0m Don't store a symlink to the new system on the build host."
+    echo -e "\e[1m\e[36m  --fetch        \e[0m Copy the current system of the target host to the build host before building."
+    echo -e "\e[1m\e[36m  --no-fetch     \e[0m Don't copy the current system of the target host to the build host before building. (default)"
+    echo -e
+    echo -e "\e[1m\e[32mOptions:\e[0m"
+    echo -e "\e[1m\e[36m  -h  --help     \e[0m Print help"
+    exit
+  fi
+done
 
 action=switch
 buildLocal=0
@@ -179,8 +214,9 @@ while [[ $# -gt 0 ]]; do
     --no-fetch)
       fetch=0
       ;;
-    --*)
-      echo -e "\033[1m\033[31mUnknown flag: $i\033[0m"
+    -*)
+      echo -e "\e[1m\e[31mUnknown flag: $i\e[0m"
+      echo -e "For more information, try '\e[1m\e[36m--help\e[0m'."
       exit 1
       ;;
     *)
