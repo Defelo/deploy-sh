@@ -46,6 +46,36 @@ deploy() {
     buildCache=""
   fi
 
+  if [[ "$action" = "diff" ]]; then
+    log "Copying current derivation from target host $targetHost"
+    if ! currentDrv=$(ssh $(sshPort "$targetHost") $(sshHost "$targetHost") nix-store --query --deriver /run/current-system); then
+      log "Failed to lookup current system on $targetHost" "\e[31m"
+      return 1
+    fi
+
+    if [[ "$currentDrv" = "$systemDrv" ]]; then
+      log "Current and new configuration are the same" "\e[32m"
+      return
+    fi
+
+    if ! [[ -e "$currentDrv" ]] && ! env $(nixSshPort "$targetHost") $nix copy --derivation --from $(nixSshHost "$targetHost") "$currentDrv^*"; then
+      if [[ -z "$buildHost" ]] || [[ "$targetHost" = "$buildHost" ]]; then
+        log "Failed to fetch current system from $targetHost" "\e[31m"
+        return 1
+      fi
+
+      log "Failed to fetch current system from $targetHost" "\e[33m"
+      if ! env $(nixSshPort "$buildHost") $nix copy --derivation --from $(nixSshHost "$buildHost") "$currentDrv^*"; then
+        log "Failed to fetch current system from $buildHost" "\e[31m"
+        return 1
+      fi
+    fi
+
+    log "Current and new configuration differ:" "\e[33m"
+    nix-diff "$currentDrv" "$systemDrv"
+    return
+  fi
+
   if [[ -z "$buildHost" ]]; then
     log "Building locally, then deploying to $targetHost" "\e[36m"
   elif [[ "$buildHost" = "$targetHost" ]]; then
@@ -64,6 +94,11 @@ deploy() {
   log "System derivation: $systemDrv" "\e[0m"
 
   local nomPipe="--log-format internal-json -v |& $nom/bin/nom --json"
+
+  if [[ "$buildHost" != "$targetHost" ]] && [[ "$pushDerivations" = "1" ]]; then
+    log "Copying derivations to target host $targetHost"
+    env $(nixSshPort "$targetHost") $nix copy --derivation --to $(nixSshHost "$targetHost") "$systemDrv^*"
+  fi
 
   if [[ -n "$buildHost" ]]; then
     log "Copying derivations to build host $buildHost"
@@ -150,6 +185,7 @@ for arg in $@; do
     echo -e "\e[1m\e[36m  --test         \e[0m Build and activate the new configuration, but do not add it to the boot menu."
     echo -e "\e[1m\e[36m  --dry-activate \e[0m Build the new configuration, but do not activate it."
     echo -e "\e[1m\e[36m  --reboot       \e[0m Build the new configuration, make it the boot default and reboot into the new system."
+    echo -e "\e[1m\e[36m  --diff         \e[0m Display differences between the current and new configuration, but do not activate it."
     echo -e
     echo -e "\e[1m\e[32mHost options:\e[0m"
     echo -e "\e[1m\e[36m  --local        \e[0m Build the configuration locally and copy the new system to the target host."
@@ -181,7 +217,7 @@ deployed=0
 while [[ $# -gt 0 ]]; do
   i="$1"; shift 1
   case "$i" in
-    --switch|--boot|--test|--dry-activate|--reboot)
+    --switch|--boot|--test|--dry-activate|--reboot|--diff)
       action=${i#"--"}
       ;;
     --local)

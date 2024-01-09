@@ -32,7 +32,7 @@
           install -DT ${./deploy.sh} $out/bin/deploy
         '';
         postFixup = ''
-          wrapProgram $out/bin/deploy --set PATH ${with pkgs; lib.makeBinPath [coreutils bash nix git openssh]}
+          wrapProgram $out/bin/deploy --set PATH ${with pkgs; lib.makeBinPath [coreutils bash nix git openssh nix-diff]}
         '';
       };
     });
@@ -68,6 +68,13 @@
               A path on the build host where to store a symlink to the new system to avoid garbage collection.
             '';
           };
+          enableDiff = mkOption {
+            type = types.bool;
+            default = true;
+          };
+          pushDerivations = mkOption {
+            type = types.bool;
+          };
 
           _config = mkOption {
             type = types.anything;
@@ -76,17 +83,24 @@
           };
         };
 
-        config.deploy-sh._config = let
-          vars = {
-            inherit (config.deploy-sh) buildHost targetHost buildCache;
-            systemDrv = config.system.build.toplevel.drvPath;
-            system = config.system.build.toplevel.outPath;
-            nomDrv = pkgs.nix-output-monitor.drvPath;
-            nom = pkgs.nix-output-monitor.outPath;
-          };
-          text = builtins.concatStringsSep "" (lib.mapAttrsToList (k: v: "local ${k}=${lib.escapeShellArg v}\n") vars);
-        in
-          pkgs.writeText "deploy-sh-config" (builtins.unsafeDiscardStringContext text);
+        config = let
+          cfg = config.deploy-sh;
+        in {
+          deploy-sh.pushDerivations = lib.mkDefault cfg.enableDiff;
+          deploy-sh._config = let
+            vars = {
+              inherit (cfg) buildHost targetHost buildCache pushDerivations;
+              systemDrv = config.system.build.toplevel.drvPath;
+              system = config.system.build.toplevel.outPath;
+              nomDrv = pkgs.nix-output-monitor.drvPath;
+              nom = pkgs.nix-output-monitor.outPath;
+            };
+            text = builtins.concatStringsSep "" (lib.mapAttrsToList (k: v: "local ${k}=${lib.escapeShellArg v}\n") vars);
+          in
+            pkgs.writeText "deploy-sh-config" (builtins.unsafeDiscardStringContext text);
+
+          nix.settings.keep-derivations = lib.mkIf cfg.enableDiff true;
+        };
       };
   };
 }
