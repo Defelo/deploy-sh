@@ -32,7 +32,7 @@
           install -DT ${./deploy.sh} $out/bin/deploy
         '';
         postFixup = ''
-          wrapProgram $out/bin/deploy --set PATH ${with pkgs; lib.makeBinPath [coreutils bash nix git openssh nix-diff]}
+          wrapProgram $out/bin/deploy --set PATH ${with pkgs; lib.makeBinPath [coreutils bash nix git openssh nix-diff nvd]}
         '';
       };
     });

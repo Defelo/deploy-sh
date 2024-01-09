@@ -95,6 +95,7 @@ Activation options:
   --dry-activate  Build the new configuration, but do not activate it.
   --reboot        Build the new configuration, make it the boot default and reboot into the new system.
   --diff          Display differences between the current and new configuration, but do not activate it.
+  --nvd           Display package version differences between the current and new configuration, but do not activate it.
 
 Host options:
   --local         Build the configuration locally and copy the new system to the target host.
