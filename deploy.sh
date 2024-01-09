@@ -26,6 +26,7 @@ deploy() {
   local config
   config=$($nix build --no-link --print-out-paths ".#nixosConfigurations.\"$host\".config.deploy-sh._config")
   source "$config"
+  log "Evaluation succeeded!" "\e[32m"
 
   if [[ -n "$targetHostOverride" ]]; then
     targetHost="$targetHostOverride"
@@ -46,7 +47,7 @@ deploy() {
     buildCache=""
   fi
 
-  if [[ "$action" =~ ^(diff|nvd)$ ]]; then
+  if [[ $nvd = 1 ]] || [[ $diff = 1 ]]; then
     log "Copying current derivation from target host $targetHost"
     if ! currentDrv=$(ssh $(sshPort "$targetHost") $(sshHost "$targetHost") nix-store --query --deriver /run/current-system); then
       log "Failed to lookup current system on $targetHost" "\e[31m"
@@ -72,14 +73,15 @@ deploy() {
     fi
 
     log "Current and new configuration differ:" "\e[33m"
-    case "$action" in
-      diff)
-        nix-diff "$currentDrv" "$systemDrv"
-        ;;
-      nvd)
-        nvd diff "$currentDrv" "$systemDrv"
-        ;;
-    esac
+    if [[ $diff = 1 ]]; then
+      nix-diff "$currentDrv" "$systemDrv"
+    fi
+    if [[ $nvd = 1 ]]; then
+      nvd diff "$currentDrv" "$systemDrv"
+    fi
+  fi
+
+  if [[ "$action" = "eval" ]]; then
     return
   fi
 
@@ -192,8 +194,13 @@ for arg in $@; do
     echo -e "\e[1m\e[36m  --test         \e[0m Build and activate the new configuration, but do not add it to the boot menu."
     echo -e "\e[1m\e[36m  --dry-activate \e[0m Build the new configuration, but do not activate it."
     echo -e "\e[1m\e[36m  --reboot       \e[0m Build the new configuration, make it the boot default and reboot into the new system."
-    echo -e "\e[1m\e[36m  --diff         \e[0m Display differences between the current and new configuration, but do not activate it."
-    echo -e "\e[1m\e[36m  --nvd          \e[0m Display package version differences between the current and new configuration, but do not activate it."
+    echo -e "\e[1m\e[36m  --eval         \e[0m Evaluate the new configuration, but neither build nor activate it."
+    echo -e
+    echo -e "\e[1m\e[32mActivation options:\e[0m"
+    echo -e "\e[1m\e[36m  --diff         \e[0m Display differences between the current and new configuration"
+    echo -e "\e[1m\e[36m  --no-diff      \e[0m Don't display differences between the current and new configuration."
+    echo -e "\e[1m\e[36m  --nvd          \e[0m Display package differences between the current and new configuration. (default)"
+    echo -e "\e[1m\e[36m  --no-nvd       \e[0m Don't display package differences between the current and new configuration."
     echo -e
     echo -e "\e[1m\e[32mHost options:\e[0m"
     echo -e "\e[1m\e[36m  --local        \e[0m Build the configuration locally and copy the new system to the target host."
@@ -221,12 +228,26 @@ targetHostOverride=""
 buildCacheOverride=""
 fetch=0
 deployed=0
+diff=0
+nvd=1
 
 while [[ $# -gt 0 ]]; do
   i="$1"; shift 1
   case "$i" in
-    --switch|--boot|--test|--dry-activate|--reboot|--diff|--nvd)
+    --switch|--boot|--test|--dry-activate|--reboot|--eval)
       action=${i#"--"}
+      ;;
+    --diff)
+      diff=1
+      ;;
+    --no-diff)
+      diff=0
+      ;;
+    --nvd)
+      nvd=1
+      ;;
+    --no-nvd)
+      nvd=0
       ;;
     --local)
       buildLocal=1
