@@ -17,6 +17,13 @@ nixSshPort() { echo "NIX_SSHOPTS=$(sshPort $1)"; }
 
 nix="nix --extra-experimental-features nix-command --extra-experimental-features flakes"
 
+extractKernelPaths() {
+  build=$($nix derivation show "$1^*" | jq -r 'values | .[].env.buildCommand')
+  for path in initrd kernel kernel-modules; do
+    grep -o "^ln -s .* \\\$out/$path\$" <<< "$build" | cut -d' ' -f3
+  done
+}
+
 deploy() {
   host="$1"
   trap "log 'Deployment of $host failed!' \"\e[31m\"" ERR
@@ -56,28 +63,31 @@ deploy() {
 
     if [[ "$currentDrv" = "$systemDrv" ]]; then
       log "Current and new configuration are the same" "\e[32m"
-      return
-    fi
+    else
+      if ! [[ -e "$currentDrv" ]] && ! env $(nixSshPort "$targetHost") $nix copy --derivation --from $(nixSshHost "$targetHost") "$currentDrv^*"; then
+        if [[ -z "$buildHost" ]] || [[ "$targetHost" = "$buildHost" ]]; then
+          log "Failed to fetch current system from $targetHost" "\e[31m"
+          return 1
+        fi
 
-    if ! [[ -e "$currentDrv" ]] && ! env $(nixSshPort "$targetHost") $nix copy --derivation --from $(nixSshHost "$targetHost") "$currentDrv^*"; then
-      if [[ -z "$buildHost" ]] || [[ "$targetHost" = "$buildHost" ]]; then
-        log "Failed to fetch current system from $targetHost" "\e[31m"
-        return 1
+        log "Failed to fetch current system from $targetHost" "\e[33m"
+        if ! env $(nixSshPort "$buildHost") $nix copy --derivation --from $(nixSshHost "$buildHost") "$currentDrv^*"; then
+          log "Failed to fetch current system from $buildHost" "\e[31m"
+          return 1
+        fi
       fi
 
-      log "Failed to fetch current system from $targetHost" "\e[33m"
-      if ! env $(nixSshPort "$buildHost") $nix copy --derivation --from $(nixSshHost "$buildHost") "$currentDrv^*"; then
-        log "Failed to fetch current system from $buildHost" "\e[31m"
-        return 1
+      log "Current and new configuration differ:" "\e[33m"
+      if [[ $diff = 1 ]]; then
+        nix-diff "$currentDrv" "$systemDrv"
       fi
-    fi
+      if [[ $nvd = 1 ]]; then
+        nvd diff "$currentDrv" "$systemDrv"
+      fi
 
-    log "Current and new configuration differ:" "\e[33m"
-    if [[ $diff = 1 ]]; then
-      nix-diff "$currentDrv" "$systemDrv"
-    fi
-    if [[ $nvd = 1 ]]; then
-      nvd diff "$currentDrv" "$systemDrv"
+      if [[ "$(extractKernelPaths $currentDrv)" != "$(extractKernelPaths $systemDrv)" ]]; then
+        log "Reboot is recommended after deploying this configuration!" "\e[33m"
+      fi
     fi
   fi
 
@@ -174,6 +184,11 @@ deploy() {
     ssh $(sshPort "$targetHost") $(sshHost "$targetHost") "$system/bin/switch-to-configuration" "$action"
   fi
 
+  if ! ssh $(sshPort "$targetHost") $(sshHost "$targetHost") 'cmp -s <(readlink /run/booted-system/{initrd,kernel,kernel-modules}) <(readlink /run/current-system/{initrd,kernel,kernel-modules})'; then
+    rebootHosts+=("$host")
+    log "It is recommended to reboot the target host now!" "\e[33m"
+  fi
+
   log "Deployment of $host succeeded!" "\e[32m"
 }
 
@@ -230,6 +245,8 @@ fetch=0
 deployed=0
 diff=0
 nvd=1
+
+rebootHosts=()
 
 while [[ $# -gt 0 ]]; do
   i="$1"; shift 1
@@ -297,5 +314,13 @@ if [[ $deployed = 0 ]]; then
     if [[ $deployed = 1 ]]; then echo; fi
     deploy "$host"
     deployed=1
+  done
+fi
+
+unset host
+if [[ ${#rebootHosts[@]} -ne 0 ]]; then
+  log "\nIt is recommended to reboot the following target hosts now:" "\e[33m"
+  for h in ${rebootHosts[@]}; do
+    log " - $h" "\e[33m"
   done
 fi
