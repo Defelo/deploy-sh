@@ -211,7 +211,7 @@ for arg in $@; do
     echo -e "\e[1m\e[36m  --reboot       \e[0m Build the new configuration, make it the boot default and reboot into the new system."
     echo -e "\e[1m\e[36m  --eval         \e[0m Evaluate the new configuration, but neither build nor activate it."
     echo -e
-    echo -e "\e[1m\e[32mActivation options:\e[0m"
+    echo -e "\e[1m\e[32mDiff options:\e[0m"
     echo -e "\e[1m\e[36m  --diff         \e[0m Display differences between the current and new configuration"
     echo -e "\e[1m\e[36m  --no-diff      \e[0m Don't display differences between the current and new configuration."
     echo -e "\e[1m\e[36m  --nvd          \e[0m Display package differences between the current and new configuration. (default)"

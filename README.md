@@ -96,7 +96,7 @@ Activation options:
   --reboot        Build the new configuration, make it the boot default and reboot into the new system.
   --eval          Evaluate the new configuration, but neither build nor activate it.
 
-Activation options:
+Diff options:
   --diff          Display differences between the current and new configuration
   --no-diff       Don't display differences between the current and new configuration.
   --nvd           Display package differences between the current and new configuration. (default)
