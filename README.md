@@ -73,7 +73,7 @@ Simple NixOS remote deployment tool
 </details>
 
 ## NixOS Module Options
-See [flake.nix](https://github.com/Defelo/deploy-sh/blob/develop/flake.nix#L48-L70)
+See [flake.nix](https://github.com/Defelo/deploy-sh/blob/develop/flake.nix#L48-L77)
 
 ## Usage
 ```
