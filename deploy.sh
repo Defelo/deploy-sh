@@ -177,7 +177,7 @@ deploy() {
     ssh $(sshPort "$targetHost") $(sshHost "$targetHost") reboot
     log "Waiting for $targetHost to reboot"
     sleep 5
-    while ! ssh $(sshPort "$targetHost") $(sshHost "$targetHost") true; do
+    while ! ssh $(sshPort "$targetHost") $(sshHost "$targetHost") -o StrictHostKeyChecking=yes true; do
       sleep 1
     done
   else
