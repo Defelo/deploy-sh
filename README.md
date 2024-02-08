@@ -29,7 +29,7 @@ Simple NixOS remote deployment tool
   ```nix
   {
     inputs = {
-      deploy-sh = "github:Defelo/deploy-sh";
+      deploy-sh.url = "github:Defelo/deploy-sh";
     };
     outputs = {self, nixpkgs, deploy-sh, ...}: {
       nixosConfigurations.foo = nixpkgs.lib.nixosSystem {
